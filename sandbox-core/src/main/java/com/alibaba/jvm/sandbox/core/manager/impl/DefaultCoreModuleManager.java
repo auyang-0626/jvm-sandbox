@@ -261,7 +261,7 @@ public class DefaultCoreModuleManager implements CoreModuleManager {
                     writeField(
                             resourceField,
                             module,
-                            new DefaultConfigInfo(cfg),
+                            DynamicConfigInfo.getInstance(cfg),
                             true
                     );
                 }

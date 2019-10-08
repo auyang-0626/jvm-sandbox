@@ -2,6 +2,7 @@ package com.alibaba.jvm.sandbox.core.server.jetty;
 
 import com.alibaba.jvm.sandbox.core.CoreConfigure;
 import com.alibaba.jvm.sandbox.core.JvmSandbox;
+import com.alibaba.jvm.sandbox.core.manager.impl.DynamicConfigInfo;
 import com.alibaba.jvm.sandbox.core.server.CoreServer;
 import com.alibaba.jvm.sandbox.core.server.jetty.servlet.ModuleHttpServlet;
 import com.alibaba.jvm.sandbox.core.server.jetty.servlet.WebSocketAcceptorServlet;
@@ -203,7 +204,7 @@ public class JettyCoreServer implements CoreServer {
                     local.getHostName(),
                     local.getPort()
             );
-
+            DynamicConfigInfo.getInstance(cfg).register(local.getHostName(),local.getPort());
         } catch (Throwable cause) {
 
             // 这里会抛出到目标应用层，所以在这里留下错误信息

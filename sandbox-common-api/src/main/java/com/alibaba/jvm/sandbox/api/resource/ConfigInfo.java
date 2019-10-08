@@ -184,4 +184,5 @@ public interface ConfigInfo {
      */
     String getVersion();
 
+    String getDynamicValue(String key, String field);
 }

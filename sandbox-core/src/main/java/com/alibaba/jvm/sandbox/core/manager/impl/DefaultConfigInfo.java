@@ -132,4 +132,9 @@ class DefaultConfigInfo implements ConfigInfo {
             IOUtils.closeQuietly(is);
         }
     }
+
+    @Override
+    public String getDynamicValue(String key, String field) {
+        return null;
+    }
 }

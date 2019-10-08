@@ -10,6 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.InputStream;
 import java.util.*;
 
@@ -26,6 +27,10 @@ public class CoreConfigure {
     private static final String KEY_LAUNCH_MODE = "mode";
     private static final String KEY_SERVER_IP = "server.ip";
     private static final String KEY_SERVER_PORT = "server.port";
+    private static final String KEY_SERVER_APP = "server.app";
+    private static final String KEY_SERVER_SZONE = "server.szone";
+    private static final String KEY_SERVER_ENV = "server.port";
+
 
     private static final String KEY_SYSTEM_MODULE_LIB_PATH = "system_module";
     private static final String KEY_USER_MODULE_LIB_PATH = "user_module";
@@ -67,6 +72,7 @@ public class CoreConfigure {
             }
         }
         cfg.featureMap.putAll(propertiesMap);
+        initAppAndEnvAndSzone(cfg);
         return cfg;
     }
 
@@ -270,7 +276,7 @@ public class CoreConfigure {
     public String getServerIp() {
         return StringUtils.isNotBlank(featureMap.get(KEY_SERVER_IP))
                 ? featureMap.get(KEY_SERVER_IP)
-                : "127.0.0.1";
+                : "0.0.0.0";
     }
 
     /**
@@ -291,4 +297,67 @@ public class CoreConfigure {
         return featureMap.get(KEY_PROVIDER_LIB_PATH);
     }
 
+    public String getApp() {
+        return featureMap.get(KEY_SERVER_APP);
+    }
+    public Boolean isProd(){
+        return StringUtils.endsWithAny(featureMap.get(KEY_SERVER_ENV),"prod","prepub");
+    }
+    public String getAppKey() {
+        return String.format("%s_%s_%s", featureMap.get(KEY_SERVER_SZONE), featureMap.get(KEY_SERVER_ENV), featureMap.get(KEY_SERVER_APP));
+    }
+
+    private static void initAppAndEnvAndSzone(CoreConfigure cfg) {
+        String szone = null;
+        String env = null;
+        // 运维默认会在该文件配置env和szone
+        File setting = new File("/opt/settings/server.properties");
+        if (setting.exists()){
+            try {
+                // 获取 szone 和 env
+                Properties properties = new Properties();
+                properties.load(new FileReader(setting));
+                szone = properties.getProperty("szone","souche");
+                env = properties.getProperty("env");
+            }catch (Exception e){
+                //ignore
+            }
+        }
+        if (StringUtils.isBlank(env)){
+            env = System.getProperty("env","dev");
+        }
+        // app env szone
+        cfg.featureMap.put(KEY_SERVER_APP,findAppName());
+        cfg.featureMap.put(KEY_SERVER_ENV,env);
+        cfg.featureMap.put(KEY_SERVER_SZONE,szone);
+    }
+
+    private static String findAppName() {
+        String app;
+        app = System.getProperty("APP_NAME");
+        if (StringUtils.isBlank(app)){
+            try {
+                InputStream is = CoreConfigure.class.getResourceAsStream("/systemInfo.properties");
+                Properties systemInfoProperty  = new Properties();
+                systemInfoProperty.load(is);
+                app = systemInfoProperty.getProperty("systemInfo.appName");
+            }catch (Exception e){
+                //ignore
+            }
+        }
+        if (StringUtils.isBlank(app)){
+            try {
+                InputStream is = CoreConfigure.class.getResourceAsStream("/config/systemInfo.properties");
+                Properties systemInfoProperty  = new Properties();
+                systemInfoProperty.load(is);
+                app = systemInfoProperty.getProperty("systemInfo.appName");
+            }catch (Exception e){
+                //ignore
+            }
+        }
+        if (StringUtils.isBlank(app)){
+            app = "unknownApp";
+        }
+        return app;
+    }
 }
