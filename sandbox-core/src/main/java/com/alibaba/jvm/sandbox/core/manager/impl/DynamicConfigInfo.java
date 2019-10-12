@@ -18,6 +18,8 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.net.InetAddress;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class DynamicConfigInfo extends DefaultConfigInfo{
@@ -33,10 +35,10 @@ public class DynamicConfigInfo extends DefaultConfigInfo{
 
     private static DynamicConfigInfo configInfo;
 
-    private LoadingCache<Pair<String,String>, String> cache = CacheBuilder.newBuilder().expireAfterWrite(120, TimeUnit.SECONDS).build(
-            new CacheLoader<Pair<String,String>, String>() {
+    private LoadingCache<Map.Entry<String,String>, String> cache = CacheBuilder.newBuilder().expireAfterWrite(120,TimeUnit.SECONDS).build(
+            new CacheLoader<Map.Entry<String,String>, String>() {
                 @Override
-                public String load(final Pair<String,String> key) throws Exception {
+                public String load(final Map.Entry<String,String>key) throws Exception {
                     return invoke(new Operate() {
                         @Override
                         public String invoke(Jedis jedis) {
@@ -110,7 +112,7 @@ public class DynamicConfigInfo extends DefaultConfigInfo{
     @Override
     public String getDynamicValue(String key, String field) {
         try {
-            return cache.get(new Pair<String, String>(key, field));
+            return cache.get(new HashMap.SimpleEntry<String,String>(key, field));
         } catch (Exception e) {
             return null;
         }

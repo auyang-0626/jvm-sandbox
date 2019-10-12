@@ -134,6 +134,11 @@ class DefaultConfigInfo implements ConfigInfo {
     }
 
     @Override
+    public String getApp() {
+        return cfg.getApp();
+    }
+
+    @Override
     public String getDynamicValue(String key, String field) {
         return null;
     }
