@@ -4,8 +4,10 @@ import com.alibaba.jvm.sandbox.api.event.Event;
 import com.alibaba.jvm.sandbox.api.filter.Filter;
 import com.alibaba.jvm.sandbox.api.listener.EventListener;
 import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchCondition;
+import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchWith;
 import com.alibaba.jvm.sandbox.api.resource.ModuleEventWatcher;
 
+import java.lang.instrument.ClassFileTransformer;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MockForBuilderModuleEventWatcher implements ModuleEventWatcher {
@@ -18,6 +20,9 @@ public class MockForBuilderModuleEventWatcher implements ModuleEventWatcher {
 
     private final AtomicReference<Progress> progressRef
             = new AtomicReference<Progress>();
+
+    private final AtomicReference<ClassFileTransformer> classFileTransformerAtomicRef
+            = new AtomicReference<ClassFileTransformer>();
 
     private final AtomicReference<Event.Type[]> eventTypeArrayRef
             = new AtomicReference<Event.Type[]>();
@@ -32,6 +37,10 @@ public class MockForBuilderModuleEventWatcher implements ModuleEventWatcher {
 
     public Progress getProgress() {
         return progressRef.get();
+    }
+
+    public ClassFileTransformer getClassFileTransformer() {
+        return classFileTransformerAtomicRef.get();
     }
 
     public Event.Type[] getEventTypeArray() {
@@ -53,6 +62,16 @@ public class MockForBuilderModuleEventWatcher implements ModuleEventWatcher {
         eventWatchConditionRef.set(condition);
         eventListenerRef.set(listener);
         progressRef.set(progress);
+        eventTypeArrayRef.set(eventType);
+        return 0;
+    }
+
+    @Override
+    public int watch(EventWatchCondition condition, EventWatchWith with, EventListener listener, Event.Type... eventType) {
+        eventWatchConditionRef.set(condition);
+        eventListenerRef.set(listener);
+        progressRef.set(with.getProgress());
+        classFileTransformerAtomicRef.set(with.getAfterClassFileTransformer());
         eventTypeArrayRef.set(eventType);
         return 0;
     }

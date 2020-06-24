@@ -10,10 +10,10 @@ import com.alibaba.jvm.sandbox.api.resource.ModuleEventWatcher.Progress;
 import com.alibaba.jvm.sandbox.api.util.GaArrayUtils;
 import com.alibaba.jvm.sandbox.api.util.GaStringUtils;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.lang.instrument.ClassFileTransformer;
+import java.lang.instrument.IllegalClassFormatException;
+import java.security.ProtectionDomain;
+import java.util.*;
 
 import static com.alibaba.jvm.sandbox.api.event.Event.Type.*;
 import static com.alibaba.jvm.sandbox.api.listener.ext.EventWatchBuilder.PatternType.WILDCARD;
@@ -181,7 +181,7 @@ public class EventWatchBuilder {
 
         IBuildingForWatching onWatching();
 
-        EventWatcher onWatch(AdviceListener adviceListener);
+        EventWatcher onWatch(AdviceListener adviceListener, Event.Type... eventTypeArray);
 
         EventWatcher onWatch(EventListener eventListener, Event.Type... eventTypeArray);
 
@@ -202,6 +202,17 @@ public class EventWatchBuilder {
          * @return IBuildingForWatching
          */
         IBuildingForWatching withProgress(Progress progress);
+
+        /**
+         * 添加渲染后类变型器，可以添加多个
+         * <p>
+         * 给用户一个在事件渲染之后，重新感知和改变类字节码的机会
+         * </p>
+         *
+         * @param classFileTransformer 类变型器
+         * @return IBuildingForWatching
+         */
+        IBuildingForWatching withAfterClassFileTransformer(ClassFileTransformer classFileTransformer);
 
         /**
          * 观察行为内部的方法调用
@@ -548,7 +559,7 @@ public class EventWatchBuilder {
 
         @Override
         public IBuildingForBehavior withEmptyParameterTypes() {
-            withParameterTypes.add(new String[]{});
+            withParameterTypes.add();
             return this;
         }
 
@@ -629,8 +640,12 @@ public class EventWatchBuilder {
         }
 
         @Override
-        public EventWatcher onWatch(final AdviceListener adviceListener) {
-            return build(new AdviceAdapterListener(adviceListener), null, BEFORE, RETURN, THROWS, IMMEDIATELY_RETURN, IMMEDIATELY_THROWS);
+        public EventWatcher onWatch(final AdviceListener adviceListener, Event.Type... eventTypeArray) {
+            if (eventTypeArray == null
+                    || eventTypeArray.length == 0) {
+                return build(new AdviceAdapterListener(adviceListener), null, BEFORE, RETURN, THROWS, IMMEDIATELY_RETURN, IMMEDIATELY_THROWS);
+            }
+            return build(new AdviceAdapterListener(adviceListener), null, eventTypeArray);
         }
 
         @Override
@@ -644,11 +659,20 @@ public class EventWatchBuilder {
 
         private final Set<Event.Type> eventTypeSet = new HashSet<Event.Type>();
         private final List<Progress> progresses = new ArrayList<Progress>();
+        private final List<ClassFileTransformer> afterClassFileTransformers = new ArrayList<ClassFileTransformer>();
 
         @Override
         public IBuildingForWatching withProgress(Progress progress) {
             if (null != progress) {
                 progresses.add(progress);
+            }
+            return this;
+        }
+
+        @Override
+        public IBuildingForWatching withAfterClassFileTransformer(ClassFileTransformer classFileTransformer) {
+            if (null != classFileTransformer) {
+                afterClassFileTransformers.add(classFileTransformer);
             }
             return this;
         }
@@ -676,14 +700,22 @@ public class EventWatchBuilder {
             eventTypeSet.add(IMMEDIATELY_THROWS);
             return build(
                     new AdviceAdapterListener(adviceListener),
-                    toProgressGroup(progresses),
+                    new EventWatchWith()
+                            .setProgress(toProgressGroup(progresses))
+                            .setAfterClassFileTransformer(toClassFileTransformerGroup(afterClassFileTransformers)),
                     eventTypeSet.toArray(new Event.Type[0])
             );
         }
 
         @Override
         public EventWatcher onWatch(EventListener eventListener, Event.Type... eventTypeArray) {
-            return build(eventListener, toProgressGroup(progresses), eventTypeArray);
+            return build(
+                    eventListener,
+                    new EventWatchWith()
+                            .setProgress(toProgressGroup(progresses))
+                            .setAfterClassFileTransformer(toClassFileTransformerGroup(afterClassFileTransformers)),
+                    eventTypeArray
+            );
         }
 
     }
@@ -750,6 +782,14 @@ public class EventWatchBuilder {
         );
     }
 
+    private ClassFileTransformerGroup toClassFileTransformerGroup(final List<ClassFileTransformer> classFileTransformers) {
+        if (null == classFileTransformers
+                || classFileTransformers.isEmpty()) {
+            return null;
+        }
+        return new ClassFileTransformerGroup(classFileTransformers);
+    }
+
     private ProgressGroup toProgressGroup(final List<Progress> progresses) {
         if (progresses.isEmpty()) {
             return null;
@@ -758,13 +798,15 @@ public class EventWatchBuilder {
     }
 
     private EventWatcher build(final EventListener listener,
-                               final Progress progress,
+                               final EventWatchWith with,
                                final Event.Type... eventTypes) {
 
         final int watchId = moduleEventWatcher.watch(
                 toEventWatchCondition(),
+                null == with
+                        ? new EventWatchWith()
+                        : with,
                 listener,
-                progress,
                 eventTypes
         );
 
@@ -793,10 +835,41 @@ public class EventWatchBuilder {
         };
     }
 
+    private static class ClassFileTransformerGroup implements ClassFileTransformer {
+
+        private final List<ClassFileTransformer> classFileTransformers;
+
+        private ClassFileTransformerGroup(List<ClassFileTransformer> classFileTransformers) {
+            this.classFileTransformers = classFileTransformers;
+        }
+
+        @Override
+        public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+            if (null == classFileTransformers) {
+                return classfileBuffer;
+            }
+            byte[] byteCodeArray = classfileBuffer;
+            for (ClassFileTransformer classFileTransformer : classFileTransformers) {
+                final byte[] tempOfClassfileBuffer = classFileTransformer.transform(
+                        loader,
+                        className,
+                        classBeingRedefined,
+                        protectionDomain,
+                        byteCodeArray
+                );
+                classfileBuffer = null != tempOfClassfileBuffer
+                        ? tempOfClassfileBuffer
+                        : classfileBuffer;
+            }
+            return classfileBuffer;
+        }
+
+    }
+
     /**
      * 观察进度组
      */
-    private class ProgressGroup implements Progress {
+    private static class ProgressGroup implements Progress {
 
         private final List<Progress> progresses;
 

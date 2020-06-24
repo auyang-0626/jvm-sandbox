@@ -2,6 +2,7 @@ package com.alibaba.jvm.sandbox.core.manager.impl;
 
 import com.alibaba.jvm.sandbox.api.event.Event;
 import com.alibaba.jvm.sandbox.api.listener.EventListener;
+import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchWith;
 import com.alibaba.jvm.sandbox.core.classloader.ModuleJarClassLoader;
 import com.alibaba.jvm.sandbox.core.enhance.EventEnhancer;
 import com.alibaba.jvm.sandbox.core.util.ObjectIDs;
@@ -9,6 +10,7 @@ import com.alibaba.jvm.sandbox.core.util.matcher.Matcher;
 import com.alibaba.jvm.sandbox.core.util.matcher.MatchingResult;
 import com.alibaba.jvm.sandbox.core.util.matcher.UnsupportedMatcher;
 import com.alibaba.jvm.sandbox.core.util.matcher.structure.ClassStructure;
+import org.apache.commons.lang3.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +32,7 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
     private final int watchId;
     private final String uniqueId;
     private final Matcher matcher;
+    private final EventWatchWith with;
     private final EventListener eventListener;
     private final boolean isEnableUnsafe;
     private final Event.Type[] eventTypeArray;
@@ -41,6 +44,7 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
     SandboxClassFileTransformer(final int watchId,
                                 final String uniqueId,
                                 final Matcher matcher,
+                                final EventWatchWith with,
                                 final EventListener eventListener,
                                 final boolean isEnableUnsafe,
                                 final Event.Type[] eventTypeArray,
@@ -48,6 +52,7 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
         this.watchId = watchId;
         this.uniqueId = uniqueId;
         this.matcher = matcher;
+        this.with = with;
         this.eventListener = eventListener;
         this.isEnableUnsafe = isEnableUnsafe;
         this.eventTypeArray = eventTypeArray;
@@ -89,11 +94,22 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
                 return null;
             }
 
-            return _transform(
+            final byte[] byteCodeArray = _transform(
                     loader,
                     internalClassName,
                     classBeingRedefined,
                     srcByteCodeArray
+            );
+
+            // 如果设置了编织后行变则进行一些处理
+            return null == with.getAfterClassFileTransformer() ? byteCodeArray : with.getAfterClassFileTransformer().transform(
+                    loader,
+                    internalClassName,
+                    classBeingRedefined,
+                    protectionDomain,
+                    null == byteCodeArray
+                            ? srcByteCodeArray
+                            : byteCodeArray
             );
 
 
@@ -132,6 +148,12 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
 
         // 开始进行类匹配
         try {
+
+            if (ArrayUtils.isEmpty(eventTypeArray)) {
+                logger.debug("transform ignore {}, nothing event need enhance in loader={}", internalClassName, loader);
+                return null;
+            }
+
             final byte[] toByteCodeArray = new EventEnhancer().toByteCodeArray(
                     loader,
                     srcByteCodeArray,
@@ -140,6 +162,7 @@ public class SandboxClassFileTransformer implements ClassFileTransformer {
                     listenerId,
                     eventTypeArray
             );
+
             if (srcByteCodeArray == toByteCodeArray) {
                 logger.debug("transform ignore {}, nothing changed in loader={}", internalClassName, loader);
                 return null;

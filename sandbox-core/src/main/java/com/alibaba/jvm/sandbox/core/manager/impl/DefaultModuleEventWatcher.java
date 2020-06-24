@@ -4,6 +4,7 @@ import com.alibaba.jvm.sandbox.api.event.Event;
 import com.alibaba.jvm.sandbox.api.filter.Filter;
 import com.alibaba.jvm.sandbox.api.listener.EventListener;
 import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchCondition;
+import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchWith;
 import com.alibaba.jvm.sandbox.api.resource.ModuleEventWatcher;
 import com.alibaba.jvm.sandbox.core.CoreModule;
 import com.alibaba.jvm.sandbox.core.enhance.weaver.EventListenerHandlers;
@@ -155,7 +156,12 @@ public class DefaultModuleEventWatcher implements ModuleEventWatcher {
                      final EventListener listener,
                      final Progress progress,
                      final Event.Type... eventType) {
-        return watch(new ExtFilterMatcher(make(filter)), listener, progress, eventType);
+        return watch(
+                new ExtFilterMatcher(make(filter)),
+                listener,
+                new EventWatchWith().setProgress(progress),
+                eventType
+        );
     }
 
     @Override
@@ -163,18 +169,33 @@ public class DefaultModuleEventWatcher implements ModuleEventWatcher {
                      final EventListener listener,
                      final Progress progress,
                      final Event.Type... eventType) {
-        return watch(toOrGroupMatcher(condition.getOrFilterArray()), listener, progress, eventType);
+        return watch(
+                toOrGroupMatcher(condition.getOrFilterArray()),
+                listener,
+                new EventWatchWith().setProgress(progress),
+                eventType
+        );
+    }
+
+    @Override
+    public int watch(EventWatchCondition condition, EventWatchWith with, EventListener listener, Event.Type... eventType) {
+        return watch(
+                toOrGroupMatcher(condition.getOrFilterArray()),
+                listener,
+                with,
+                eventType
+        );
     }
 
     // 这里是用matcher重制过后的watch
     private int watch(final Matcher matcher,
                       final EventListener listener,
-                      final Progress progress,
+                      final EventWatchWith with,
                       final Event.Type... eventType) {
         final int watchId = watchIdSequencer.next();
         // 给对应的模块追加ClassFileTransformer
         final SandboxClassFileTransformer sandClassFileTransformer = new SandboxClassFileTransformer(
-                watchId, coreModule.getUniqueId(), matcher, listener, isEnableUnsafe, eventType, namespace);
+                watchId, coreModule.getUniqueId(), matcher, with, listener, isEnableUnsafe, eventType, namespace);
 
         // 注册到CoreModule中
         coreModule.getSandboxClassFileTransformers().add(sandClassFileTransformer);
@@ -193,11 +214,11 @@ public class DefaultModuleEventWatcher implements ModuleEventWatcher {
         int cCnt = 0, mCnt = 0;
 
         // 进度通知启动
-        beginProgress(progress, waitingReTransformClasses.size());
+        beginProgress(with.getProgress(), waitingReTransformClasses.size());
         try {
 
             // 应用JVM
-            reTransformClasses(watchId, waitingReTransformClasses, progress);
+            reTransformClasses(watchId, waitingReTransformClasses, with.getProgress());
 
             // 计数
             cCnt += sandClassFileTransformer.getAffectStatistic().cCnt();
@@ -212,7 +233,7 @@ public class DefaultModuleEventWatcher implements ModuleEventWatcher {
             }
 
         } finally {
-            finishProgress(progress, cCnt, mCnt);
+            finishProgress(with.getProgress(), cCnt, mCnt);
         }
 
         return watchId;
@@ -287,7 +308,12 @@ public class DefaultModuleEventWatcher implements ModuleEventWatcher {
                          final WatchCallback watchCb,
                          final Progress dProgress,
                          final Event.Type... eventType) throws Throwable {
-        final int watchId = watch(new ExtFilterMatcher(make(filter)), listener, wProgress, eventType);
+        final int watchId = watch(
+                new ExtFilterMatcher(make(filter)),
+                listener,
+                new EventWatchWith().setProgress(wProgress),
+                eventType
+        );
         try {
             watchCb.watchCompleted();
         } finally {

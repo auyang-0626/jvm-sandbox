@@ -5,7 +5,10 @@ import com.alibaba.jvm.sandbox.api.filter.AccessFlags;
 import com.alibaba.jvm.sandbox.api.filter.Filter;
 import com.alibaba.jvm.sandbox.api.listener.ext.AdviceListener;
 import com.alibaba.jvm.sandbox.api.listener.ext.EventWatchBuilder;
+import com.alibaba.jvm.sandbox.api.resource.ModuleEventWatcher;
 import com.alibaba.jvm.sandbox.qatest.api.mock.MockForBuilderModuleEventWatcher;
+import com.alibaba.jvm.sandbox.qatest.api.mock.MockForBuilderProgress;
+import com.alibaba.jvm.sandbox.qatest.api.mock.MockForClassFileTransformer;
 import com.alibaba.jvm.sandbox.qatest.api.util.ApiQaArrayUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -31,6 +34,8 @@ public class EventWatchBuilderTestCase {
         Assert.assertTrue(ApiQaArrayUtils.has(Event.Type.IMMEDIATELY_RETURN, mockForBuilderModuleEventWatcher.getEventTypeArray()));
         Assert.assertTrue(ApiQaArrayUtils.has(Event.Type.IMMEDIATELY_THROWS, mockForBuilderModuleEventWatcher.getEventTypeArray()));
         Assert.assertEquals(1, mockForBuilderModuleEventWatcher.getEventWatchCondition().getOrFilterArray().length);
+        Assert.assertNull(mockForBuilderModuleEventWatcher.getProgress());
+        Assert.assertNull(mockForBuilderModuleEventWatcher.getClassFileTransformer());
     }
 
     @Test
@@ -170,6 +175,24 @@ public class EventWatchBuilderTestCase {
                 new String[]{Integer.class.getName()},
                 null
         ));
+
+    }
+
+    @Test
+    public void test$$EventWatchBuilder$$with() {
+
+        final MockForBuilderModuleEventWatcher mockForBuilderModuleEventWatcher
+                = new MockForBuilderModuleEventWatcher();
+        new EventWatchBuilder(mockForBuilderModuleEventWatcher)
+                .onClass(String.class)
+                .onBehavior("toString")
+                .onWatching()
+                .withProgress(new MockForBuilderProgress())
+                .withAfterClassFileTransformer(new MockForClassFileTransformer())
+                .onWatch(new AdviceListener());
+
+        Assert.assertNotNull(mockForBuilderModuleEventWatcher.getProgress());
+        Assert.assertNotNull(mockForBuilderModuleEventWatcher.getClassFileTransformer());
 
     }
 
